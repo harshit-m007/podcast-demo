@@ -137,6 +137,7 @@ def generate_script(state: PodcastState) -> PodcastState:
 def create_podcast(state: PodcastState) -> PodcastState:
     """Node: Generate full podcast audio"""
     segments = []
+    failed_lines = []
     
     for line in state["script"].split('\n'):
         line = line.strip()
@@ -154,14 +155,19 @@ def create_podcast(state: PodcastState) -> PodcastState:
             
         if text:
             try:
+                print(f"Attempting to generate audio for: {text[:50]}... (speaker: {speaker})")
                 segment = generate_audio_segment(text, VOICES[speaker])
                 segments.append(segment)
+                print(f"✅ Successfully generated segment")
             except Exception as e:
-                print(f"⚠️ Failed to generate: '{text[:50]}...'")
+                print(f"⚠️ Failed to generate: '{text[:50]}...' - Error: {str(e)}")
+                failed_lines.append(text)
                 continue
     
     if not segments:
-        raise HTTPException(status_code=400, detail="No valid audio segments created")
+        error_msg = "No valid audio segments created. Failed lines:\n" + "\n".join(failed_lines[:5])
+        print(error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
     
     podcast = segments[0]
     for seg in segments[1:]:
