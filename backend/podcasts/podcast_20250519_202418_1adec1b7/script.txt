@@ -1,0 +1,19 @@
+Please provide the text you'd like me to create the podcast script from! 
+
+Once you give me the text, I'll craft a 3-minute script with:
+
+*  An engaging intro
+*  Two hosts alternating dialogue
+*  Key points from your text 
+*  A natural outro
+*  Short, expressive one-word interjections from one of the hosts
+
+
+I'm ready to make your podcast script awesome! 🎧✨  
+
+mcp servers (deep learning)
+
+1.AWS account to deploy
+2. curl request ready example curl request in output
+3. mcp servers
+4. eleven labs api key

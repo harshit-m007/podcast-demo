@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydub
+requests
+langchain
+langgraph
+langchain-groq
+
