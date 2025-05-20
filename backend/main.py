@@ -38,7 +38,7 @@ os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
 
 # API Keys
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("groq_api_key")
 
 # Voice IDs
 VOICES = {
