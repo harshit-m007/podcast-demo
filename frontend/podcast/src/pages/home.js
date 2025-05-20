@@ -12,7 +12,7 @@ const PodcastGenerator = () => {
   const [analysis, setAnalysis] = useState(null);
   const [activeTab, setActiveTab] = useState('input');
 
-  const API_BASE_URL = 'http://127.0.0.1:8000';
+  const API_BASE_URL = 'https://podcast-demo.onrender.com';
 
   useEffect(() => {
     let interval;
