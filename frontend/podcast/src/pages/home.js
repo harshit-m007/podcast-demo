@@ -25,7 +25,7 @@ const PodcastGenerator = () => {
     voice2: { id: 'voice2', name: 'Domi' }
   };
 
-  const API_BASE_URL = 'http://127.0.0.1:8000';
+  const API_BASE_URL = 'https://podcast-demo.onrender.com';
 
   const defaultPrompt = `Create a 3-minute podcast script with:
 1. Engaging intro
@@ -38,7 +38,7 @@ Format strictly EXACTLY like:
 **Host 1:** [text]
 **Host 2:** [text]
 
-Make it engaging like including short one word expressive diaglogs by one the hosts during conversation.`;
+Make it engaging like including short one word expressive dialogs by one the hosts during conversation.`;
 
   useEffect(() => {
     setCustomPrompt(defaultPrompt);
