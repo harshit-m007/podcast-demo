@@ -44,13 +44,21 @@ GROQ_API_KEY = os.getenv("groq_api_key")
 VOICES = {
     "host": "cgSgspJ2msm6clMCkdW9",  # samantha samalytics
     "cohost": "pwMBn0SsmN1220Aorv15",  # ben
-    "highlights": "pwMBn0SsmN1220Aorv15"
+    "highlights": "pwMBn0SsmN1220Aorv15",
+    "voice1": "21m00Tcm4TlvDq8ikWAM",  # Rachel
+    "voice2": "AZnzlk1XvdvUeBnXmlld"   # Domi
 }
 
 # Models
 class TextInput(BaseModel):
     text: str
     voice_preference: Optional[str] = "host"
+    podcast_length: Optional[int] = 3  # fixed at 3 minutes
+    num_key_points: Optional[int] = 3
+    num_major_issues: Optional[int] = 2
+    host_voice: Optional[str] = "host"
+    cohost_voice: Optional[str] = "cohost"
+    custom_prompt: Optional[str] = None
 
 class PodcastResponse(BaseModel):
     job_id: str
@@ -66,6 +74,11 @@ class PodcastState(TypedDict):
     analysis: Dict
     soundbites: List[str]
     output_dir: str
+    podcast_length: int
+    num_key_points: int
+    num_major_issues: int
+    host_voice: str
+    cohost_voice: str
 
 # Initialize LLM
 llm = ChatGroq(temperature=0.7, model_name="gemma2-9b-it", api_key=GROQ_API_KEY)
@@ -112,18 +125,54 @@ def generate_audio_segment(text: str, voice_id: str) -> AudioSegment:
         raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
 
 # --- Nodes ---
-def collect_text_input(state: PodcastState, text: str) -> PodcastState:
+def collect_text_input(state: PodcastState, text: str, podcast_length: int, num_key_points: int, num_major_issues: int, host_voice: str, cohost_voice: str) -> PodcastState:
     """Node: Collect text input"""
-    return {"raw_text": text, "output_dir": state.get("output_dir", "")}
+    print(f"\n📥 Collecting input with parameters:")
+    print(f"Podcast Length: {podcast_length}")
+    print(f"Number of Key Points: {num_key_points}")
+    print(f"Number of Major Issues: {num_major_issues}")
+    print(f"Host Voice: {host_voice}")
+    print(f"Co-host Voice: {cohost_voice}\n")
+    
+    return {
+        "raw_text": text,
+        "output_dir": state.get("output_dir", ""),
+        "podcast_length": podcast_length,
+        "num_key_points": num_key_points,
+        "num_major_issues": num_major_issues,
+        "host_voice": host_voice,
+        "cohost_voice": cohost_voice
+    }
 
 def generate_script(state: PodcastState) -> PodcastState:
     """Node: Generate podcast script"""
+    # Log state parameters
+    print(f"\n📝 Generating script with parameters:")
+    print(f"Podcast Length: {state.get('podcast_length', 3)}")
+    print(f"Number of Key Points: {state.get('num_key_points', 3)}")
+    print(f"Number of Major Issues: {state.get('num_major_issues', 2)}")
+    print(f"Host Voice: {state.get('host_voice', 'host')}")
+    print(f"Co-host Voice: {state.get('cohost_voice', 'cohost')}\n")
+    
+    # Use custom prompt if provided, otherwise use default
+    prompt = state.get('custom_prompt', f"""Create a {state.get('podcast_length', 3)}-minute podcast script with:
+1. Engaging intro
+2. Two hosts alternating dialogue
+3. EXACTLY {state.get('num_key_points', 3)} key points from provided text
+4. EXACTLY {state.get('num_major_issues', 2)} major issues discussed
+5. Natural outro
+
+Format strictly EXACTLY like:
+**Host 1:** [text]
+**Host 2:** [text]
+
+Make it engaging like including short one word expressive diaglogs by one the hosts during conversation.
+IMPORTANT: You MUST include EXACTLY {state.get('num_key_points', 3)} key points and EXACTLY {state.get('num_major_issues', 2)} major issues.
+
+The script should be structured to fit within {state.get('podcast_length', 3)} minutes.""")
+    
     messages = [
-        SystemMessage(content="Create a 3-minute podcast script with:\n"
-                      "1. Engaging intro\n2. Two hosts alternating dialogue\n"
-                      "3. Key points from provided text\n4. Natural outro\n"
-                      "Format strictly EXACTLY like:\n**Host 1:** [text]\n**Host 2:** [text]\n"
-                      "Make it engaging like including short one word expressive diaglogs by one the hosts during conversation"),
+        SystemMessage(content=prompt),
         HumanMessage(content=state["raw_text"])
     ]
     response = llm.invoke(messages)
@@ -132,7 +181,14 @@ def generate_script(state: PodcastState) -> PodcastState:
     with open(script_path, "w", encoding='utf-8') as f:
         f.write(response.content)
     
-    return {"script": response.content}
+    return {
+        "script": response.content,
+        "podcast_length": state.get("podcast_length", 3),
+        "num_key_points": state.get("num_key_points", 3),
+        "num_major_issues": state.get("num_major_issues", 2),
+        "host_voice": state.get("host_voice", "host"),
+        "cohost_voice": state.get("cohost_voice", "cohost")
+    }
 
 def create_podcast(state: PodcastState) -> PodcastState:
     """Node: Generate full podcast audio"""
@@ -145,10 +201,10 @@ def create_podcast(state: PodcastState) -> PodcastState:
             continue
             
         if line.startswith("**Host 1:**"):
-            speaker = "host"
+            speaker = state.get("host_voice", "host")
             text = line[10:].strip()
         elif line.startswith("**Host 2:**"):
-            speaker = "cohost"
+            speaker = state.get("cohost_voice", "cohost")
             text = line[10:].strip()
         else:
             continue
@@ -183,21 +239,18 @@ def analyze_content(state: PodcastState) -> PodcastState:
     """Node: Analyze script for sound bites"""
     print("\n💎 Analyzing content...")
     messages = [
-        SystemMessage(content="""Analyze this podcast script and return a JSON object in this exact format:
-{
+        SystemMessage(content=f"""Analyze this podcast script and return a JSON object in this exact format:
+{{
     "key_points": [
-        "First key point (20-30 words)",
-        "Second key point (20-30 words)",
-        "Third key point (25-30 words)"
+        {", ".join([f'"Key point {i+1} (20-30 words)"' for i in range(state.get("num_key_points", 3))])}
     ],
     "major_issues": [
-        "First major issue discussed",
-        "Second major issue discussed"
+        {", ".join([f'"Major issue {i+1} discussed"' for i in range(state.get("num_major_issues", 2))])}
     ],
     "conclusions": [
         "The main conclusion"
     ]
-}
+}}
 Important: Return ONLY valid JSON, no additional text or formatting."""),
         HumanMessage(content=state["script"])
     ]
@@ -222,7 +275,14 @@ Important: Return ONLY valid JSON, no additional text or formatting."""),
         with open(analysis_path, "w", encoding='utf-8') as f:
             json.dump(analysis, f, indent=2, ensure_ascii=False)
             
-        return {"analysis": analysis}
+        return {
+            "analysis": analysis,
+            "podcast_length": state.get("podcast_length", 3),
+            "num_key_points": state.get("num_key_points", 3),
+            "num_major_issues": state.get("num_major_issues", 2),
+            "host_voice": state.get("host_voice", "host"),
+            "cohost_voice": state.get("cohost_voice", "cohost")
+        }
         
     except json.JSONDecodeError as e:
         print(f"Failed to parse JSON response. Raw content:\n{content}")
@@ -258,17 +318,25 @@ def create_soundbites(state: PodcastState) -> PodcastState:
     return {"soundbites": soundbites}
 
 # --- Workflow Construction ---
-def run_podcast_workflow(input_text: str, job_id: str):
+def run_podcast_workflow(input_text: str, job_id: str, podcast_length: int = 3, num_key_points: int = 3, num_major_issues: int = 2, host_voice: str = "host", cohost_voice: str = "cohost"):
     """Run the complete podcast generation workflow"""
     try:
         output_dir = create_output_dir()
         jobs[job_id] = {"status": "running", "output_dir": output_dir}
         
+        # Log workflow parameters
+        print(f"\n🎙️ Starting workflow with parameters:")
+        print(f"Podcast Length: {podcast_length}")
+        print(f"Number of Key Points: {num_key_points}")
+        print(f"Number of Major Issues: {num_major_issues}")
+        print(f"Host Voice: {host_voice}")
+        print(f"Co-host Voice: {cohost_voice}\n")
+        
         # Define workflow
         workflow = StateGraph(PodcastState)
         
         # Add nodes with modified versions that take initial state
-        workflow.add_node("collect_input", lambda state: collect_text_input(state, input_text))
+        workflow.add_node("collect_input", lambda state: collect_text_input(state, input_text, podcast_length, num_key_points, num_major_issues, host_voice, cohost_voice))
         workflow.add_node("generate_script", generate_script)
         workflow.add_node("create_podcast", create_podcast)
         workflow.add_node("analyze_content", analyze_content)
@@ -291,6 +359,7 @@ def run_podcast_workflow(input_text: str, job_id: str):
         jobs[job_id]["message"] = "Podcast generation completed successfully"
         
     except Exception as e:
+        print(f"\n❌ Error in workflow: {str(e)}")
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["message"] = str(e)
 
@@ -301,7 +370,24 @@ async def generate_from_text(input: TextInput, background_tasks: BackgroundTasks
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "queued"}
     
-    background_tasks.add_task(run_podcast_workflow, input.text, job_id)
+    # Log the input parameters
+    print(f"\n🔧 Received parameters:")
+    print(f"Podcast Length: {input.podcast_length}")
+    print(f"Number of Key Points: {input.num_key_points}")
+    print(f"Number of Major Issues: {input.num_major_issues}")
+    print(f"Host Voice: {input.host_voice}")
+    print(f"Co-host Voice: {input.cohost_voice}\n")
+    
+    background_tasks.add_task(
+        run_podcast_workflow,
+        input.text,
+        job_id,
+        input.podcast_length,
+        input.num_key_points,
+        input.num_major_issues,
+        input.host_voice,
+        input.cohost_voice
+    )
     
     return {
         "job_id": job_id,
